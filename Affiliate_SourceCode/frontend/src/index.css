@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+*{ -webkit-tap-highlight-color: transparent; }
+html{ scroll-behavior: smooth; }
+body{ font-family: "Be Vietnam Pro", sans-serif; }
+.scrollbar-none::-webkit-scrollbar{ display:none; }
+.scrollbar-none{ -ms-overflow-style:none; scrollbar-width:none; }
+.card{ will-change: transform; transform: translateZ(0); }
+.shimmer{ background: linear-gradient(90deg,#eee 25%,#f5f5f5 37%,#eee 63%); background-size:400% 100%; animation: shimmer 1.2s ease-in-out infinite; }
+@keyframes shimmer{ 0%{background-position:100% 0} 100%{background-position:-100% 0} }
