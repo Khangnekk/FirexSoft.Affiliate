@@ -133,7 +133,7 @@ export default function Admin(){
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-white text-[#1a6b4a] grid place-items-center"><Leaf size={18}/></div>
-              <div><div className="font-extrabold leading-none">Nguyen L. Khang</div></div>
+              <div><div className="font-extrabold leading-none">2Trees</div></div>
             </div>
             <button onClick={()=>setDrawer(false)} className="lg:hidden p-1.5 bg-white/10 rounded-lg"><X size={16}/></button>
           </div>

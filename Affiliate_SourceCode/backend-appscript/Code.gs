@@ -313,7 +313,7 @@ function seed_(){
   ensure(SHEETS.CATEGORIES, ['id','name','slug','icon','order','createdAt'], [['C1','Điện Gia Dụng','dien-gia-dung','🏠',1,new Date().toISOString()],['C2','Làm Đẹp','lam-dep','💄',2,new Date().toISOString()],['C3','Thời Trang','thoi-trang','👗',3,new Date().toISOString()]]);
   ensure(SHEETS.PRODUCTS, ['id','title','categoryId','categorySlug','imageUrl','price','originalPrice','platform','affiliateUrl','description','isActive','order','createdAt'], [['P1','Son Lì Siêu Mịn','C2','lam-dep','https://via.placeholder.com/400','99000','149000','shopee','https://shopee.vn/product','Mô tả', 'TRUE',1,new Date().toISOString()]]);
   ensure(SHEETS.PLATFORMS, ['id','name','key','baseUrl','isActive'], [['PL1','Shopee','shopee','https://shopee.vn','TRUE'],['PL2','TikTok Shop','tiktok','https://shop.tiktok.com','TRUE'],['PL3','Lazada','lazada','https://lazada.vn','TRUE']]);
-  ensure(SHEETS.CONFIG, ['key','value'], [['siteTitle','Nguyen Luong Khang'],['siteSub','link đồ giới thiệu đến mọi người'],['cloudinaryCloudName',''],['cloudinaryUploadPreset',''],['contactEmail',''],['contactPhone',''],['contactZalo','']]);
+  ensure(SHEETS.CONFIG, ['key','value'], [['siteTitle','2Trees'],['siteSub','link đồ giới thiệu đến mọi người'],['cloudinaryCloudName',''],['cloudinaryUploadPreset',''],['contactEmail',''],['contactPhone',''],['contactZalo','']]);
   ensure(SHEETS.REQUESTS, ['id','name','email','phone','zalo','productName','productUrl','note','status','createdAt','processedAt'], []);
   PropertiesService.getScriptProperties().setProperty('JWT_SECRET','aff_'+Date.now());
   return {seeded:true};

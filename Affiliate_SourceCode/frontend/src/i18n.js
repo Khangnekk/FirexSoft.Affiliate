@@ -4,7 +4,7 @@ import { initReactI18next } from 'react-i18next'
 const resources = {
   vi: {
     translation: {
-      site_title: "Nguyen Luong Khang",
+      site_title: "2Trees",
       site_sub: "",
       search_placeholder: "Tìm sản phẩm, deal hot...",
       all: "Tất cả",
@@ -115,7 +115,7 @@ const resources = {
   },
   en: {
     translation: {
-      site_title: "Nguyen Luong Khang",
+      site_title: "2Trees",
       site_sub: "",
       search_placeholder: "Search products, hot deals...",
       all: "All",

@@ -75,10 +75,9 @@ export default function ClientHome(){
       <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-xl border-b border-black/[0.06]">
         <div className="max-w-[1240px] mx-auto px-4 sm:px-6">
           <div className="flex items-center gap-3 py-3.5">
-            <div className="w-9 h-9 rounded-xl bg-[#1a6b4a] grid place-items-center text-white shadow"><Leaf size={18} strokeWidth={2.2}/></div>
+            <div className="w-11 h-11 rounded-2xl bg-[#1a6b4a] grid place-items-center text-white shadow"><Leaf size={22} strokeWidth={2.2}/></div>
             <div className="flex-1 min-w-0">
-              <h1 className="font-extrabold text-[16px] leading-none tracking-tight flex items-center gap-1.5"><a href="https://www.linkedin.com/in/khangnekk/" target="_blank" rel="noopener noreferrer" className="hover:text-[#1a6b4a] transition-colors">{t('site_title')}</a> <a href="https://www.linkedin.com/in/khangnekk/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#1a6b4a] text-white hover:bg-black transition"><ExternalLink size={10}/></a></h1>
-              <p className="text-[11.5px] truncate"><a href="https://www.linkedin.com/in/khangnekk/" target="_blank" rel="noopener" className="text-[#1a6b4a] hover:underline">linkedin.com/in/khangnekk</a></p>
+              <h1 className="font-extrabold text-[20px] leading-none tracking-tight flex items-center gap-1.5"><a href="https://www.linkedin.com/in/khangnekk/" target="_blank" rel="noopener noreferrer" className="hover:text-[#1a6b4a] transition-colors">{t('site_title')}</a> <a href="https://www.linkedin.com/in/khangnekk/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#1a6b4a] text-white hover:bg-black transition"><ExternalLink size={10}/></a></h1>
             </div>
             <div className="hidden sm:flex w-2"/>
             <LangSwitch compact />
