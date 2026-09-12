@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { LayoutDashboard, Package, Link2, Settings2, LogOut, Plus, Trash2, Pencil, Upload, Image as ImageIcon, ImageOff, ExternalLink, Leaf, Menu, X, Search, Loader2, Check } from 'lucide-react'
+import { LayoutDashboard, Package, Link2, Settings2, LogOut, Plus, Trash2, Pencil, Upload, Image as ImageIcon, ImageOff, ExternalLink, Leaf, Menu, X, Search, Loader2, Check, ClipboardList, Mail, Phone, MessageCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { AppstoreOutlined, ShoppingOutlined, ApiOutlined, CloudOutlined } from '@ant-design/icons'
 import { api, cloudinaryUpload } from '../api'
 import LangSwitch from '../components/LangSwitch.jsx'
@@ -11,10 +11,24 @@ function useAuth(){
   if(!token) location.href='/login'
   return token
 }
+function cleanRequestValue(value){
+  const text=String(value??'').trim()
+  return text==='undefined'||text==='null'?'':text
+}
+function formatRequestPhone(value){
+  const raw=cleanRequestValue(value).replace(/[^\d+]/g,'')
+  let phone=raw
+  if(phone.startsWith('+84')) phone=phone.slice(3)
+  else if(phone.startsWith('84')) phone=phone.slice(2)
+  else if(phone.startsWith('0')) phone=phone.slice(1)
+  if(/^\d{9}$/.test(phone)) return {display:`+84 ${phone.slice(0,3)} ${phone.slice(3)}`,href:`+84${phone}`}
+  return {display:cleanRequestValue(value),href:cleanRequestValue(value)}
+}
 const TABS = [
   {k:'products', label:'Sản phẩm', icon: Package, ant: ShoppingOutlined},
   {k:'categories', label:'Danh mục', icon: AppstoreOutlined, isAnt:true},
   {k:'platforms', label:'Nền tảng', icon: Link2},
+  {k:'requests', label:'Yêu cầu', icon: ClipboardList},
   {k:'config', label:'Cấu hình', icon: Settings2},
 ]
 
@@ -26,9 +40,14 @@ export default function Admin(){
   const [cats,setCats]=useState([])
   const [products,setProducts]=useState([])
   const [platforms,setPlatforms]=useState([])
+  const [requests,setRequests]=useState([])
+  const [expandedRequests,setExpandedRequests]=useState(new Set())
+  const [requestFilter,setRequestFilter]=useState('pending')
+  const [requestSort,setRequestSort]=useState('newest')
   const [form,setForm]=useState({})
   const [editing,setEditing]=useState(null)
   const [cloud,setCloud]=useState({cloud:'', preset:''})
+  const [contact,setContact]=useState({email:'', phone:'', zalo:''})
   const [uploading,setUploading]=useState(false)
   const [saving,setSaving]=useState(null)
   const [toast,setToast]=useState('')
@@ -36,9 +55,11 @@ export default function Admin(){
   function showToast(m){ setToast(m); setTimeout(()=>setToast(''),1800)}
 
   async function load(){
-    const [c,p,pl,cf]=await Promise.all([ api.getCategories(), api.getProducts({}), api.getPlatforms(), api.getConfig()])
+    const [c,p,pl,cf,rq]=await Promise.all([ api.getCategories(), api.getProducts({}), api.getPlatforms(), api.getConfig(), api.getPromotionRequests(token)])
     setCats(c.data||[]); setProducts(p.data||[]); setPlatforms(pl.data||[]);
     setCloud({cloud: cf.data?.cloudinaryCloudName||'', preset: cf.data?.cloudinaryUploadPreset||''})
+    setContact({email:cf.data?.contactEmail||'', phone:cf.data?.contactPhone||'', zalo:cf.data?.contactZalo||''})
+    setRequests(rq.data||[])
   }
   useEffect(()=>{ load() },[])
 
@@ -47,6 +68,14 @@ export default function Admin(){
     const s=q.toLowerCase()
     return products.filter(x=> String(x.title).toLowerCase().includes(s) || String(x.platform).toLowerCase().includes(s))
   },[products,q])
+
+  const visibleRequests = useMemo(()=> [...requests]
+    .filter(request=>requestFilter==='processed' ? request.status==='processed' : request.status!=='processed')
+    .sort((a,b)=>{
+      const first=new Date(a.createdAt||0).getTime()
+      const second=new Date(b.createdAt||0).getTime()
+      return requestSort==='oldest' ? first-second : second-first
+    }),[requests,requestFilter,requestSort])
 
   async function saveCategory(){
     if(!form.name) return alert('Nhập tên danh mục')
@@ -70,6 +99,30 @@ export default function Admin(){
     if(!cloud.cloud || !cloud.preset) return alert(t('upload_preset_note'))
     setUploading(true)
     try{ const url = await cloudinaryUpload(file, cloud.cloud, cloud.preset); setForm(s=>({...s, imageUrl:url})) } finally{ setUploading(false) }
+  }
+  async function updateRequestStatus(id,status){
+    await api.updatePromotionRequestStatus(id,status,token)
+    setRequests(items=>items.map(item=>item.id===id?{...item,status,processedAt:status==='processed'?new Date().toISOString():''}:item))
+    showToast(t('saved'))
+  }
+  function toggleRequest(id){
+    setExpandedRequests(current=>{
+      const next=new Set(current)
+      if(next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  async function saveContact(){
+    setSaving('contact')
+    try{
+      await Promise.all([
+        api.updateConfig('contactEmail',contact.email,token),
+        api.updateConfig('contactPhone',contact.phone,token),
+        api.updateConfig('contactZalo',contact.zalo,token)
+      ])
+      showToast(t('saved'))
+    } finally{ setSaving(null) }
   }
 
   return (
@@ -114,7 +167,7 @@ export default function Admin(){
 
       <div className="lg:pl-[264px] min-h-screen flex flex-col">
         <header className="sticky top-0 z-10 bg-white border-b border-black/5">
-          <div className="max-w-[1200px] mx-auto px-4 sm:px-6 h-[64px] flex items-center gap-3">
+          <div className="max-w-[1200px] mx-auto px-3 sm:px-6 min-h-[64px] py-3 flex flex-wrap items-center gap-3">
             <button onClick={()=>setDrawer(true)} className="lg:hidden w-9 h-9 rounded-xl bg-[#1a6b4a] text-white grid place-items-center shrink-0"><Menu size={18}/></button>
             <span className="hidden sm:grid w-9 h-9 rounded-xl bg-[#f3f5f3] place-items-center border shrink-0"><LayoutDashboard size={16} className="text-[#1a6b4a]"/></span>
             <div className="min-w-0 hidden sm:block">
@@ -122,19 +175,19 @@ export default function Admin(){
               <p className="text-xs text-zinc-500 truncate">Shopee • Tiktok Shop • Lazada</p>
             </div>
             {tab==='products' && (
-              <div className="flex-1 max-w-[520px] mx-2 relative">
+              <div className="order-3 basis-full min-w-0 max-w-none mx-0 relative sm:order-none sm:flex-1 sm:basis-auto sm:max-w-[520px] sm:mx-2">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"/>
                 <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Tìm sản phẩm..." className="w-full pl-9 pr-3 py-2.5 bg-[#f3f5f3] rounded-full text-sm outline-none focus:bg-white focus:ring-2 focus:ring-[#1a6b4a]/10 border border-transparent focus:border-[#1a6b4a]/15" />
               </div>
             )}
             <div className="flex items-center gap-2 shrink-0 ml-auto">
-              <a href="/" className="hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#1a6b4a] text-white text-sm font-semibold hover:bg-[#1a4d3a]"><ExternalLink size={14}/>{t('view_client')}</a>
+              <a href="/" aria-label={t('view_client')} title={t('view_client')} className="inline-flex items-center justify-center gap-1.5 w-9 h-9 sm:w-auto sm:h-auto sm:px-4 sm:py-2 rounded-xl sm:rounded-full bg-[#1a6b4a] text-white text-sm font-semibold hover:bg-[#1a4d3a]"><ExternalLink size={14}/><span className="hidden sm:inline">{t('view_client')}</span></a>
             </div>
           </div>
         </header>
 
         {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#1a6b4a] text-white px-4 py-2.5 rounded-full text-sm font-medium shadow-xl flex items-center gap-2 z-50"><Check size={16}/> {toast}</div>}
-        <main className="max-w-[1200px] mx-auto w-full p-4 sm:p-6 flex-1">
+        <main className="max-w-[1200px] mx-auto w-full p-3 sm:p-6 flex-1 min-w-0">
 
           {tab==='products' && (
             <div className="space-y-4">
@@ -147,7 +200,7 @@ export default function Admin(){
                   <h3 className="font-bold flex items-center gap-2 mb-3 text-sm"><span className="w-7 h-7 rounded-lg bg-[#1a6b4a] text-white grid place-items-center"><ShoppingOutlined style={{fontSize:14}}/></span>{editing?t('product_edit'):t('product_add')}</h3>
                   <div className="space-y-2">
                     <input value={form.title||''} onChange={e=>setForm({...form,title:e.target.value})} placeholder={t('product_name')} className="w-full bg-[#f3f5f3] rounded-xl px-3 py-2.5 text-[13px] outline-none focus:bg-white focus:ring-2 focus:ring-[#1a6b4a]/10 border border-transparent focus:border-[#1a6b4a]/15" />
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <select value={form.categoryId||''} onChange={e=>setForm({...form,categoryId:e.target.value})} className="bg-[#f3f5f3] rounded-xl px-3 py-2.5 text-[13px] outline-none">
                         <option value="">{t('choose_category')}</option>
                         {cats.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
@@ -166,7 +219,7 @@ export default function Admin(){
                         <input value={form.imageUrl||''} onChange={e=>setForm({...form,imageUrl:e.target.value})} placeholder={t('image_url_hint')} className="w-full bg-white border rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-[#1a6b4a] truncate" />
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <input value={form.price||''} onChange={e=>setForm({...form,price:e.target.value})} placeholder={t('price')} type="number" className="bg-[#f3f5f3] rounded-xl px-3 py-2.5 text-[13px] outline-none" />
                       <input value={form.originalPrice||''} onChange={e=>setForm({...form,originalPrice:e.target.value})} placeholder={t('original_price')} type="number" className="bg-[#f3f5f3] rounded-xl px-3 py-2.5 text-[13px] outline-none" />
                     </div>
@@ -177,46 +230,31 @@ export default function Admin(){
                   </div>
                 </div>
 
-                <div className="space-y-3">
-                  <div className="hidden lg:block bg-white rounded-2xl border border-black/5 overflow-hidden">
-                    <div className="overflow-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-[#f9faf9] text-xs text-zinc-500"><tr><th className="text-left p-3">Sản phẩm</th><th className="text-left p-3">Giá</th><th className="text-right p-3">Thao tác</th></tr></thead>
-                        <tbody className="divide-y">
-                          {filteredProducts.map(p=>(
-                            <tr key={p.id} className="hover:bg-[#f9faf9]">
-                              <td className="p-3 flex gap-3">
-                                <div className="relative w-12 h-12 rounded-lg bg-[#eef2ef] grid place-items-center text-[#1a6b4a]/30 shrink-0 overflow-hidden"><ImageOff size={16}/>{p.imageUrl && <img src={p.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" onError={e=>e.currentTarget.style.display='none'}/>}</div>
-                                <div className="min-w-0"><div className="font-medium line-clamp-1">{p.title}</div><div className="text-xs text-zinc-500 flex items-center gap-1"><span className="bg-[#1a6b4a] text-white px-1.5 py-0.5 rounded text-[10px] font-bold uppercase">{p.platform}</span>{p.categorySlug}</div></div>
-                              </td>
-                              <td className="p-3 font-bold text-[#1a6b4a] whitespace-nowrap">{Number(p.price).toLocaleString('vi-VN')}₫</td>
-                              <td className="p-3 text-right space-x-1">
-                                <button onClick={()=>{setEditing(p.id); setForm(p); window.scrollTo({top:0,behavior:'smooth'})}} className="w-8 h-8 rounded-full border bg-white inline-grid place-items-center hover:bg-[#1a6b4a] hover:text-white"><Pencil size={14}/></button>
-                                <button onClick={async()=>{if(confirm('Xóa?')){await api.deleteProduct(p.id, token); load()}}} className="w-8 h-8 rounded-full bg-red-50 text-red-600 inline-grid place-items-center hover:bg-red-600 hover:text-white"><Trash2 size={14}/></button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {filteredProducts.length===0 && <div className="p-10 text-center text-zinc-400">Không có sản phẩm phù hợp</div>}
+                <div className="bg-white rounded-2xl border border-black/5 overflow-hidden">
+                  <div className="px-4 sm:px-5 py-4 border-b border-black/5 flex items-center justify-between gap-3">
+                    <div><h3 className="font-bold text-sm">Danh sách sản phẩm</h3><p className="text-xs text-zinc-500 mt-0.5">Quản lý sản phẩm đang hiển thị trên trang client</p></div>
+                    <span className="shrink-0 text-xs font-semibold bg-[#f3f5f3] px-2.5 py-1.5 rounded-full text-zinc-600">{filteredProducts.length}</span>
                   </div>
-                  <div className="grid sm:grid-cols-2 lg:hidden gap-3">
-                    {filteredProducts.map(p=>(
-                      <div key={p.id} className="bg-white rounded-2xl p-3 flex gap-3 border border-black/5">
-                        <div className="relative w-20 h-20 rounded-xl bg-[#eef2ef] grid place-items-center text-[#1a6b4a]/30 shrink-0 overflow-hidden"><ImageOff size={22}/>{p.imageUrl && <img src={p.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" onError={e=>e.currentTarget.style.display='none'}/>}</div>
-                        <div className="flex-1 min-w-0 flex flex-col">
-                          <div className="font-semibold text-sm line-clamp-2 flex-1">{p.title}</div>
-                          <div className="text-xs text-zinc-400">{p.categorySlug} • <span className="bg-[#1a6b4a] text-white px-1 rounded text-[10px]">{p.platform}</span></div>
-                          <div className="font-bold text-[#1a6b4a] text-sm">{Number(p.price).toLocaleString('vi-VN')}₫</div>
-                          <div className="flex gap-1.5 mt-1">
-                            <button onClick={()=>{setEditing(p.id); setForm(p)}} className="flex-1 py-1.5 rounded-full bg-black text-white text-xs">Sửa</button>
-                            <button onClick={async()=>{if(confirm('Xóa?')){await api.deleteProduct(p.id, token); load()}}} className="px-3 py-1 rounded-full bg-red-50 text-red-600 text-xs">Xóa</button>
+                  {filteredProducts.length===0 ? <div className="p-10 text-center text-sm text-zinc-400">Không có sản phẩm phù hợp</div> : (
+                    <div className="divide-y divide-black/5">
+                      {filteredProducts.map(p=>(
+                        <div key={p.id} className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 hover:bg-[#f9faf9] transition-colors">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-[#eef2ef] grid place-items-center text-[#1a6b4a]/30 shrink-0 overflow-hidden"><ImageOff size={18}/>{p.imageUrl && <img src={p.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" onError={e=>e.currentTarget.style.display='none'}/>}</div>
+                            <div className="min-w-0">
+                              <div className="font-semibold text-sm truncate">{p.title}</div>
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1 text-xs text-zinc-500"><span className="bg-[#1a6b4a] text-white px-1.5 py-0.5 rounded text-[10px] font-bold uppercase">{p.platform}</span><span className="truncate">{p.categorySlug||'Chưa phân loại'}</span></div>
+                              <div className="font-bold text-[#1a6b4a] text-sm mt-1">{Number(p.price).toLocaleString('vi-VN')}₫</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 sm:shrink-0 sm:pl-2">
+                            <button aria-label={`Sửa ${p.title}`} title="Sửa sản phẩm" onClick={()=>{setEditing(p.id); setForm(p); window.scrollTo({top:0,behavior:'smooth'})}} className="flex-1 sm:flex-none w-auto sm:w-9 h-9 rounded-lg border bg-white inline-flex items-center justify-center gap-1.5 text-xs font-semibold hover:border-[#1a6b4a] hover:text-[#1a6b4a]"><Pencil size={14}/><span className="sm:hidden">Sửa</span></button>
+                            <button aria-label={`Xóa ${p.title}`} title="Xóa sản phẩm" onClick={async()=>{if(confirm('Xóa?')){await api.deleteProduct(p.id, token); load()}}} className="flex-1 sm:flex-none w-auto sm:w-9 h-9 rounded-lg bg-red-50 text-red-600 inline-flex items-center justify-center gap-1.5 text-xs font-semibold hover:bg-red-600 hover:text-white"><Trash2 size={14}/><span className="sm:hidden">Xóa</span></button>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -258,7 +296,7 @@ export default function Admin(){
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {platforms.map(pl=>(
                   <div key={pl.id} className="border rounded-2xl p-5 bg-[#f9faf9] hover:bg-white hover:shadow-sm transition">
-                    <div className="flex items-center gap-2 font-bold"><span className="w-9 h-9 rounded-xl bg-[#1a6b4a] text-white grid place-items-center text-xs font-black">{pl.key[0].toUpperCase()}</span>{pl.name} <span className="text-xs font-normal text-zinc-500">• {pl.key}</span></div>
+                    <div className="flex items-center gap-2 font-bold min-w-0"><span className="w-9 h-9 rounded-xl bg-[#1a6b4a] text-white grid place-items-center text-xs font-black shrink-0">{pl.key[0].toUpperCase()}</span><span className="min-w-0 break-words">{pl.name} <span className="text-xs font-normal text-zinc-500">• {pl.key}</span></span></div>
                     <input defaultValue={pl.baseUrl} id={`base-${pl.key}`} className="w-full mt-3 bg-white border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#1a6b4a]" placeholder="https://" />
                      <button onClick={async(e)=>{ const btn=e.currentTarget; const v=document.getElementById(`base-${pl.key}`).value; btn.innerHTML='...'; await api.upsertPlatform({key:pl.key, baseUrl:v}, token); showToast(t('saved')); btn.innerHTML='Save'}} className="mt-3 w-full bg-black text-white py-2.5 rounded-xl text-sm font-semibold inline-flex items-center justify-center gap-1.5">Save</button>
                   </div>
@@ -267,8 +305,54 @@ export default function Admin(){
             </div>
           )}
 
+          {tab==='requests' && (
+            <div className="bg-white rounded-2xl border border-black/5 overflow-hidden">
+              <div className="px-4 sm:px-5 py-4 border-b border-black/5 flex items-center justify-between gap-3">
+                <div><h3 className="font-bold text-sm">{t('requests_title')}</h3><p className="text-xs text-zinc-500 mt-0.5">{t('requests_note')}</p></div>
+                <span className="shrink-0 text-xs font-semibold bg-amber-50 text-amber-700 px-2.5 py-1.5 rounded-full">{requests.filter(x=>x.status!=='processed').length} {t('requests_pending')}</span>
+              </div>
+              <div className="flex flex-col gap-3 border-b border-black/5 bg-[#f9faf9] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                <div className="flex gap-2">
+                  <button onClick={()=>setRequestFilter('pending')} className={`rounded-full px-3 py-2 text-xs font-bold transition ${requestFilter==='pending'?'bg-amber-100 text-amber-800':'bg-white text-zinc-500 hover:text-zinc-800'}`}>{t('request_pending')}</button>
+                  <button onClick={()=>setRequestFilter('processed')} className={`rounded-full px-3 py-2 text-xs font-bold transition ${requestFilter==='processed'?'bg-[#dff1e4] text-[#1a6b4a]':'bg-white text-zinc-500 hover:text-zinc-800'}`}>{t('request_processed')}</button>
+                </div>
+                <select value={requestSort} onChange={e=>setRequestSort(e.target.value)} className="rounded-lg border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-zinc-600 outline-none focus:border-[#1a6b4a]">
+                  <option value="newest">{t('sort_newest')}</option>
+                  <option value="oldest">{t('sort_oldest')}</option>
+                </select>
+              </div>
+              {requests.length===0 || visibleRequests.length===0 ? <div className="p-12 text-center text-sm text-zinc-400">{requests.length===0?t('requests_empty'):t('requests_filter_empty')}</div> : (
+                <div className="divide-y divide-black/5">
+                  {visibleRequests.map(request=>{
+                    const expanded=expandedRequests.has(request.id)
+                    const name=cleanRequestValue(request.name)||t('requester_name')
+                    const createdAt=cleanRequestValue(request.createdAt)
+                    return <article key={request.id} className="border-b border-black/5 last:border-b-0">
+                      <button type="button" onClick={()=>toggleRequest(request.id)} aria-expanded={expanded} className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left hover:bg-[#f9faf9] transition sm:px-5">
+                        <span className="flex min-w-0 items-center gap-2"><span className="min-w-0 truncate text-sm font-semibold text-[#14241d]">{name}<span className="font-normal text-zinc-400">{createdAt ? ` · ${new Date(createdAt).toLocaleString('vi-VN')}` : ''}</span></span><span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${request.status==='processed'?'bg-[#edf7f0] text-[#1a6b4a]':'bg-amber-50 text-amber-700'}`}>{request.status==='processed'?t('request_processed'):t('request_pending')}</span></span>
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#f3f5f3] text-[#496157]">{expanded?<ChevronUp size={16}/>:<ChevronDown size={16}/>}</span>
+                      </button>
+                      {expanded && <div className="space-y-3 px-4 pb-5 sm:px-5">
+                        <div className="flex flex-wrap items-center gap-2"><div className="font-bold text-sm">{cleanRequestValue(request.productName)||t('promotion_request_badge')}</div><span className={`text-xs font-bold px-2.5 py-1 rounded-full ${request.status==='processed'?'bg-[#edf7f0] text-[#1a6b4a]':'bg-amber-50 text-amber-700'}`}>{request.status==='processed'?t('request_processed'):t('request_pending')}</span></div>
+                        <div className="grid sm:grid-cols-2 gap-2 text-sm text-zinc-600">
+                          {cleanRequestValue(request.email) && <a href={`mailto:${cleanRequestValue(request.email)}`} className="inline-flex items-center gap-2 hover:text-[#1a6b4a]"><Mail size={14}/>{cleanRequestValue(request.email)}</a>}
+                          {cleanRequestValue(request.phone) && <a href={`tel:${formatRequestPhone(request.phone).href}`} className="inline-flex items-center gap-2 hover:text-[#1a6b4a]"><Phone size={14}/>{formatRequestPhone(request.phone).display}</a>}
+                          {cleanRequestValue(request.zalo) && <span className="inline-flex items-center gap-2"><MessageCircle size={14}/>{cleanRequestValue(request.zalo)}</span>}
+                          {cleanRequestValue(request.productUrl) && <a href={cleanRequestValue(request.productUrl)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-[#1a6b4a] hover:underline"><ExternalLink size={14}/>{t('product_link')}</a>}
+                        </div>
+                        {cleanRequestValue(request.note) && <p className="text-sm leading-6 bg-[#f7faf8] rounded-xl p-3 text-zinc-600">{cleanRequestValue(request.note)}</p>}
+                        <button onClick={()=>updateRequestStatus(request.id,request.status==='processed'?'pending':'processed')} className="w-full sm:w-auto px-3.5 py-2 rounded-lg border text-xs font-bold hover:border-[#1a6b4a] hover:text-[#1a6b4a]">{request.status==='processed'?t('mark_pending'):t('mark_processed')}</button>
+                      </div>}
+                    </article>
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {tab==='config' && (
-            <div className="max-w-[640px] bg-white rounded-2xl p-6 sm:p-8 border border-black/5">
+            <div className="max-w-[640px] space-y-5">
+              <div className="bg-white rounded-2xl p-6 sm:p-8 border border-black/5">
               <div className="w-11 h-11 rounded-xl bg-[#1a6b4a] text-white grid place-items-center"><CloudOutlined style={{fontSize:20}}/></div>
               <h3 className="font-extrabold text-lg mt-3">{t('config')} & Cloudinary</h3><p className="text-sm text-zinc-500 mb-6">{t('cloud_help')}</p>
               <label className="text-xs font-bold">{t('cloud_name')}</label>
@@ -276,6 +360,18 @@ export default function Admin(){
               <label className="text-xs font-bold">{t('upload_preset')}</label>
               <input value={cloud.preset} onChange={e=>setCloud({...cloud, preset:e.target.value})} placeholder="affiliate" className="w-full bg-[#f3f5f3] rounded-xl px-3.5 py-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-[#1a6b4a]/10 mb-6 mt-1 border border-transparent focus:border-[#1a6b4a]/15" />
               <button onClick={async()=>{ setSaving('cfg'); await api.updateConfig('cloudinaryCloudName', cloud.cloud, token); await api.updateConfig('cloudinaryUploadPreset', cloud.preset, token); setSaving(null); showToast(t('saved'))}} disabled={saving==='cfg'} className="w-full bg-[#1a6b4a] text-white py-3 rounded-xl font-bold hover:bg-[#1a4d3a] disabled:opacity-60 inline-flex items-center justify-center gap-2">{saving==='cfg'?<><Loader2 size={16} className="animate-spin"/> Đang lưu...</>:<>Save Cloudinary</>}</button>
+              </div>
+              <div className="bg-white rounded-2xl p-6 sm:p-8 border border-black/5">
+                <div className="w-11 h-11 rounded-xl bg-[#1a6b4a] text-white grid place-items-center"><MessageCircle size={20}/></div>
+                <h3 className="font-extrabold text-lg mt-3">{t('contact_settings')}</h3><p className="text-sm text-zinc-500 mb-6">{t('contact_settings_note')}</p>
+                <label className="text-xs font-bold">{t('contact_email')}</label>
+                <input type="email" value={contact.email} onChange={e=>setContact({...contact,email:e.target.value})} className="w-full bg-[#f3f5f3] rounded-xl px-3.5 py-3 text-sm outline-none mb-4 mt-1 border border-transparent focus:border-[#1a6b4a]/15" />
+                <label className="text-xs font-bold">{t('contact_phone')}</label>
+                <input type="tel" value={contact.phone} onChange={e=>setContact({...contact,phone:e.target.value})} className="w-full bg-[#f3f5f3] rounded-xl px-3.5 py-3 text-sm outline-none mb-4 mt-1 border border-transparent focus:border-[#1a6b4a]/15" />
+                <label className="text-xs font-bold">{t('contact_zalo')}</label>
+                <input value={contact.zalo} onChange={e=>setContact({...contact,zalo:e.target.value})} className="w-full bg-[#f3f5f3] rounded-xl px-3.5 py-3 text-sm outline-none mb-6 mt-1 border border-transparent focus:border-[#1a6b4a]/15" />
+                <button onClick={saveContact} disabled={saving==='contact'} className="w-full bg-[#1a6b4a] text-white py-3 rounded-xl font-bold disabled:opacity-60 inline-flex items-center justify-center gap-2">{saving==='contact'?<><Loader2 size={16} className="animate-spin"/>...</>:t('save')}</button>
+              </div>
             </div>
           )}
         </main>

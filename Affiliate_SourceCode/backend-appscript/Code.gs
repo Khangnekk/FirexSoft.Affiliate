@@ -4,7 +4,7 @@
  * Setup: Tạo 5 sheet đúng tên, đặt JWT_SECRET trong Project Properties > Script Properties
  * Deploy: Deploy as Web App -> Anyone, Execute as Me
  */
-const SHEETS = { USERS: 'Users', CATEGORIES: 'Categories', PRODUCTS: 'Products', PLATFORMS: 'Platforms', CONFIG: 'Config' };
+const SHEETS = { USERS: 'Users', CATEGORIES: 'Categories', PRODUCTS: 'Products', PLATFORMS: 'Platforms', CONFIG: 'Config', REQUESTS: 'PromotionRequests' };
 const JWT_EXP = 7 * 24 * 60 * 60 * 1000;
 
 function getSecret_() { return PropertiesService.getScriptProperties().getProperty('JWT_SECRET') || 'change_this_secret_123'; }
@@ -54,6 +54,11 @@ function doGet(e) {
     }
     if (action === 'getPlatforms') return withCors_(jsonResponse_({ ok: true, data: getPlatforms_() }));
     if (action === 'getConfig') return withCors_(jsonResponse_({ ok: true, data: getConfig_() }));
+    if (action === 'getPromotionRequests') {
+      const auth = verifyAuth_(e.parameter.token);
+      if (!auth.ok) return withCors_(jsonResponse_(auth));
+      return withCors_(jsonResponse_({ ok: true, data: getPromotionRequests_() }));
+    }
     if (action === 'verifyToken') {
       const token = e.parameter.token || '';
       const payload = verifyJwt_(token);
@@ -79,7 +84,7 @@ function doPost(e) {
       const res = register_(body.email, body.password, body.role);
       return withCors_(jsonResponse_(res));
     }
-    if (action === 'initSeed') return withCors_(jsonResponse_({ ok: true, data: seed_() }));
+    if (action === 'createPromotionRequest') return withCors_(jsonResponse_({ ok: true, data: createPromotionRequest_(body) }));
     const auth = verifyAuth_(body.token || e.parameter.token);
     if (!auth.ok) return withCors_(jsonResponse_(auth));
     if (action === 'createCategory') return withCors_(jsonResponse_({ ok: true, data: createCategory_(body) }));
@@ -90,6 +95,7 @@ function doPost(e) {
     if (action === 'deleteProduct') return withCors_(jsonResponse_({ ok: true, data: deleteProduct_(body.id) }));
     if (action === 'upsertPlatform') return withCors_(jsonResponse_({ ok: true, data: upsertPlatform_(body) }));
     if (action === 'updateConfig') return withCors_(jsonResponse_({ ok: true, data: updateConfig_(body.key, body.value) }));
+    if (action === 'updatePromotionRequestStatus') return withCors_(jsonResponse_({ ok: true, data: updatePromotionRequestStatus_(body.id, body.status) }));
     return withCors_(jsonResponse_({ ok: false, error: 'Unknown POST action: ' + action }));
   } catch (err) { return withCors_(jsonResponse_({ ok: false, error: err.toString(), stack: err.stack || '' })); }
 }
@@ -230,6 +236,33 @@ function updateProduct_(b){
 }
 function deleteProduct_(id){ const sh=sheet_(SHEETS.PRODUCTS); const v=sh.getDataRange().getValues(); for(let i=1;i<v.length;i++) if(String(v[i][0])===String(id)){ sh.deleteRow(i+1); cacheClear_(); return {deleted:id}; } throw new Error('Not found'); }
 
+// ===== Promotion requests =====
+function getPromotionRequests_(){
+  const sh=sheet_(SHEETS.REQUESTS); const v=sh.getDataRange().getValues();
+  if(v.length<2) return [];
+  const h=v[0];
+  return v.slice(1).filter(function(r){return r[0];}).map(function(r){const o={};h.forEach(function(k,i){o[k]=r[i];});return o;}).sort(function(a,b){return new Date(b.createdAt)-new Date(a.createdAt);});
+}
+function createPromotionRequest_(b){
+  if(!b.name || !b.email) throw new Error('Missing required request fields');
+  const sh=sheet_(SHEETS.REQUESTS);
+  if(sh.getLastRow()===0) sh.appendRow(['id','name','email','phone','zalo','productName','productUrl','note','status','createdAt','processedAt']);
+  const id='R'+Date.now();
+  sh.appendRow([id,String(b.name).trim(),String(b.email).trim(),String(b.phone||'').trim(),String(b.zalo||'').trim(),String(b.productName).trim(),String(b.productUrl||'').trim(),String(b.note||'').trim(),'pending',new Date().toISOString(),'']);
+  return {id:id,status:'pending'};
+}
+function updatePromotionRequestStatus_(id,status){
+  if(status!=='pending' && status!=='processed') throw new Error('Invalid request status');
+  const sh=sheet_(SHEETS.REQUESTS); const v=sh.getDataRange().getValues(); const h=v[0];
+  const statusCol=h.indexOf('status')+1; const processedCol=h.indexOf('processedAt')+1;
+  for(let i=1;i<v.length;i++) if(String(v[i][0])===String(id)){
+    sh.getRange(i+1,statusCol).setValue(status);
+    sh.getRange(i+1,processedCol).setValue(status==='processed'?new Date().toISOString():'');
+    return {id:id,status:status};
+  }
+  throw new Error('Promotion request not found');
+}
+
 // ===== Platforms & Config =====
 function getPlatforms_(){
   const sh=sheet_(SHEETS.PLATFORMS); const v=sh.getDataRange().getValues();
@@ -248,30 +281,40 @@ function upsertPlatform_(b){
 }
 function getConfig_(){
   const sh=sheet_(SHEETS.CONFIG); const v=sh.getDataRange().getValues();
-  const o={}; for(let i=1;i<v.length;i++) o[v[i][0]]=v[i][1];
+  const o={}; for(let i=1;i<v.length;i++){ o[v[i][0]]=v[i][0]==='contactPhone'?normalizeContactPhone_(v[i][1]):v[i][1]; }
   return o;
+}
+function normalizeContactPhone_(value){
+  const s=String(value==null?'':value).trim();
+  return /^\d{9}$/.test(s)?'0'+s:s;
 }
 function updateConfig_(key,value){
   const sh=sheet_(SHEETS.CONFIG); const v=sh.getDataRange().getValues();
-  for(let i=1;i<v.length;i++) if(String(v[i][0])===String(key)){ sh.getRange(i+1,2).setValue(value); return {key:key};}
-  sh.appendRow([key,value]); return {key:key};
+  const normalized = key==='contactPhone'?normalizeContactPhone_(value):String(value==null?'':value).trim();
+  for(let i=1;i<v.length;i++) if(String(v[i][0])===String(key)){ const cell=sh.getRange(i+1,2); if(key==='contactPhone'||key==='contactZalo') cell.setNumberFormat('@'); cell.setValue(normalized); return {key:key};}
+  if(key==='contactPhone'||key==='contactZalo') sh.getRange(sh.getLastRow()+1,2).setNumberFormat('@');
+  sh.appendRow([key,normalized]); return {key:key};
 }
 function seed(){ return seed_(); }
 function initSeed(){ return seed_(); }
 function testPing(){ return 'pong '+new Date().toISOString(); }
 function seed_(){
   const ss=getSs_();
+  const adminEmail = PropertiesService.getScriptProperties().getProperty('ADMIN_EMAIL');
+  const adminPassword = PropertiesService.getScriptProperties().getProperty('ADMIN_PASSWORD');
+  if (!adminEmail || !adminPassword) throw new Error('Missing ADMIN_EMAIL and ADMIN_PASSWORD in Script Properties');
   function ensure(name, headers, rows){
     let sh=ss.getSheetByName(name); if(!sh) sh=ss.insertSheet(name); else sh.clear();
     sh.getRange(1,1,1,headers.length).setValues([headers]);
     if(rows.length) sh.getRange(2,1,rows.length,headers.length).setValues(rows);
     sh.setFrozenRows(1);
   }
-  ensure(SHEETS.USERS, ['id','email','passwordHash','role','createdAt'], [['U1','admin', hashPass_('affiliate@123'), 'admin', new Date().toISOString()]]);
+  ensure(SHEETS.USERS, ['id','email','passwordHash','role','createdAt'], [['U1',adminEmail, hashPass_(adminPassword), 'admin', new Date().toISOString()]]);
   ensure(SHEETS.CATEGORIES, ['id','name','slug','icon','order','createdAt'], [['C1','Điện Gia Dụng','dien-gia-dung','🏠',1,new Date().toISOString()],['C2','Làm Đẹp','lam-dep','💄',2,new Date().toISOString()],['C3','Thời Trang','thoi-trang','👗',3,new Date().toISOString()]]);
   ensure(SHEETS.PRODUCTS, ['id','title','categoryId','categorySlug','imageUrl','price','originalPrice','platform','affiliateUrl','description','isActive','order','createdAt'], [['P1','Son Lì Siêu Mịn','C2','lam-dep','https://via.placeholder.com/400','99000','149000','shopee','https://shopee.vn/product','Mô tả', 'TRUE',1,new Date().toISOString()]]);
   ensure(SHEETS.PLATFORMS, ['id','name','key','baseUrl','isActive'], [['PL1','Shopee','shopee','https://shopee.vn','TRUE'],['PL2','TikTok Shop','tiktok','https://shop.tiktok.com','TRUE'],['PL3','Lazada','lazada','https://lazada.vn','TRUE']]);
-  ensure(SHEETS.CONFIG, ['key','value'], [['siteTitle','Nguyen Luong Khang'],['siteSub','link đồ giới thiệu đến mọi người'],['cloudinaryCloudName',''],['cloudinaryUploadPreset','']]);
+  ensure(SHEETS.CONFIG, ['key','value'], [['siteTitle','Nguyen Luong Khang'],['siteSub','link đồ giới thiệu đến mọi người'],['cloudinaryCloudName',''],['cloudinaryUploadPreset',''],['contactEmail',''],['contactPhone',''],['contactZalo','']]);
+  ensure(SHEETS.REQUESTS, ['id','name','email','phone','zalo','productName','productUrl','note','status','createdAt','processedAt'], []);
   PropertiesService.getScriptProperties().setProperty('JWT_SECRET','aff_'+Date.now());
   return {seeded:true};
 }

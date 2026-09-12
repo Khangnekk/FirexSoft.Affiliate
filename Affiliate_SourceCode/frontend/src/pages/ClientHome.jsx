@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Search, Leaf, ShoppingBag, Heart, Home as HomeIcon, Sparkles, Store, Tag, Flame, ImageOff, ExternalLink } from 'lucide-react'
-import { ShoppingOutlined, HeartOutlined, HomeOutlined, FireOutlined } from '@ant-design/icons'
+import { Search, Leaf, ShoppingBag, Store, Tag, ImageOff, ExternalLink, Info, X, Loader2 } from 'lucide-react'
 import { api } from '../api'
 import LangSwitch from '../components/LangSwitch.jsx'
 import { RenderIcon } from '../components/IconPicker.jsx'
@@ -39,6 +38,19 @@ export default function ClientHome(){
   const [cat,setCat]=useState('')
   const [platform,setPlatform]=useState('')
   const [loading,setLoading]=useState(true)
+  const [disclosureOpen,setDisclosureOpen]=useState(false)
+  const [hideDisclosure,setHideDisclosure]=useState(false)
+  const [promotionCtaOpen,setPromotionCtaOpen]=useState(true)
+
+  useEffect(()=>{
+    setDisclosureOpen(localStorage.getItem('affiliate_disclosure_hidden') !== 'true')
+    setPromotionCtaOpen(localStorage.getItem('promotion_cta_hidden') !== 'true')
+  },[])
+
+  function closeDisclosure(){
+    if(hideDisclosure) localStorage.setItem('affiliate_disclosure_hidden','true')
+    setDisclosureOpen(false)
+  }
 
   async function load(){
     setLoading(true)
@@ -65,7 +77,7 @@ export default function ClientHome(){
           <div className="flex items-center gap-3 py-3.5">
             <div className="w-9 h-9 rounded-xl bg-[#1a6b4a] grid place-items-center text-white shadow"><Leaf size={18} strokeWidth={2.2}/></div>
             <div className="flex-1 min-w-0">
-              <h1 className="font-extrabold text-[16px] leading-none tracking-tight flex items-center gap-1.5">{t('site_title')} <a href="https://www.linkedin.com/in/khangnekk/" target="_blank" rel="noopener" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#1a6b4a] text-white hover:bg-black transition"><ExternalLink size={10}/></a></h1>
+              <h1 className="font-extrabold text-[16px] leading-none tracking-tight flex items-center gap-1.5"><a href="https://www.linkedin.com/in/khangnekk/" target="_blank" rel="noopener noreferrer" className="hover:text-[#1a6b4a] transition-colors">{t('site_title')}</a> <a href="https://www.linkedin.com/in/khangnekk/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#1a6b4a] text-white hover:bg-black transition"><ExternalLink size={10}/></a></h1>
               <p className="text-[11.5px] truncate"><a href="https://www.linkedin.com/in/khangnekk/" target="_blank" rel="noopener" className="text-[#1a6b4a] hover:underline">linkedin.com/in/khangnekk</a></p>
             </div>
             <div className="hidden sm:flex w-2"/>
@@ -102,8 +114,15 @@ export default function ClientHome(){
       </header>
 
       <main className="max-w-[1240px] mx-auto px-4 sm:px-6">
+        {promotionCtaOpen && <div className="relative mt-5 rounded-2xl border border-[#1a6b4a]/25 bg-[#eaf5ed] shadow-[0_4px_18px_rgba(26,107,74,0.08)] hover:border-[#1a6b4a]/50 hover:shadow-[0_8px_24px_rgba(26,107,74,0.14)] transition">
+          <a href="/dang-ky-gioi-thieu" className="group flex items-center justify-between gap-4 px-4 py-3.5 pr-12 text-sm">
+            <span className="flex min-w-0 items-center gap-2.5"><span className="relative flex h-2.5 w-2.5 shrink-0"><span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-60 animate-ping"/><span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-600"/></span><strong className="min-w-0 truncate text-sm text-[#14241d]">{t('promotion_cta')}</strong></span>
+            <span className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-[#1a6b4a] px-3 text-xs font-bold text-white transition-transform group-hover:translate-x-0.5"><span>{t('promotion_register_now')}</span><span className="text-base leading-none">→</span></span>
+          </a>
+          <button type="button" aria-label={t('close')} title={t('close')} onClick={()=>{localStorage.setItem('promotion_cta_hidden','true'); setPromotionCtaOpen(false)}} className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full text-[#496157] hover:bg-white hover:text-[#14241d] transition"><X size={15}/></button>
+        </div>}
         <div className="flex items-center justify-between pt-5 pb-3">
-          <h2 className="font-bold text-sm tracking-tight flex items-center gap-1.5"><Tag size={14} className="text-[#1a6b4a]"/>{filtered.length} sản phẩm</h2>
+          <h2 className="font-bold text-sm tracking-tight flex items-center gap-1.5"><Tag size={14} className="text-[#1a6b4a]"/>{filtered.length} sản phẩm {loading && <Loader2 size={14} aria-label="Đang tải sản phẩm" className="animate-spin text-[#1a6b4a]"/>}</h2>
           <span className="hidden sm:inline"/>
         </div>
 
@@ -119,14 +138,26 @@ export default function ClientHome(){
           </div>
         )}
 
-        <p className="text-center text-[11px] text-zinc-400 mt-8">© Nguyen Luong Khang — <a href="https://www.linkedin.com/in/khangnekk/" target="_blank" rel="noopener" className="underline hover:text-[#1a6b4a]">linkedin.com/in/khangnekk</a></p>
+        <p className="text-center text-[11px] leading-5 text-zinc-400 mt-8 pb-4">{t('affiliate_footer')}<br/>© {new Date().getFullYear()} Nguyen Luong Khang — <a href="https://www.linkedin.com/in/khangnekk/" target="_blank" rel="noopener" className="underline hover:text-[#1a6b4a]">linkedin.com/in/khangnekk</a></p>
       </main>
 
-      <nav className="fixed bottom-3 left-3 right-3 bg-black text-white rounded-full flex justify-around py-2.5 shadow-xl sm:hidden">
-        <a className="flex flex-col items-center gap-0.5 text-white"><HomeOutlined style={{fontSize:18}}/><span className="text-[10px] font-semibold">{t('home')}</span></a>
-        <a className="flex flex-col items-center gap-0.5 text-white/60"><HeartOutlined style={{fontSize:18}}/><span className="text-[10px]">{t('fav')}</span></a>
-        <a className="flex flex-col items-center gap-0.5 text-white/60"><ShoppingOutlined style={{fontSize:18}}/><span className="text-[10px]">Giỏ</span></a>
-      </nav>
+      {disclosureOpen && (
+        <div className="fixed inset-0 z-50 bg-[#102019]/55 backdrop-blur-sm p-4 grid place-items-center" role="dialog" aria-modal="true" aria-labelledby="affiliate-disclosure-title">
+          <div className="relative w-full max-w-md rounded-[26px] bg-white p-5 sm:p-6 shadow-[0_24px_80px_rgba(9,42,27,0.25)]">
+            <button onClick={closeDisclosure} aria-label={t('close')} title={t('close')} className="absolute top-4 right-4 w-9 h-9 rounded-full bg-[#f1f5f2] text-[#496157] grid place-items-center hover:bg-[#e5eee8] transition"><X size={17}/></button>
+            <div className="flex items-center gap-3 pr-10">
+              <div className="w-11 h-11 rounded-2xl bg-[#e8f3ec] text-[#1a6b4a] grid place-items-center shrink-0"><Info size={21}/></div>
+              <h2 id="affiliate-disclosure-title" className="font-black text-xl tracking-tight">{t('affiliate_disclosure_title')}</h2>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-[#496157]">{t('affiliate_disclaimer')}</p>
+            <label className="mt-5 flex items-start gap-2.5 cursor-pointer text-sm text-[#52665b]">
+              <input type="checkbox" checked={hideDisclosure} onChange={e=>setHideDisclosure(e.target.checked)} className="mt-1 h-4 w-4 accent-[#1a6b4a]" />
+              <span>{t('affiliate_disclosure_hide')}</span>
+            </label>
+            <button onClick={closeDisclosure} className="mt-5 w-full rounded-xl bg-[#1a6b4a] py-3 text-sm font-bold text-white hover:bg-[#14583d] transition">{t('close')}</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

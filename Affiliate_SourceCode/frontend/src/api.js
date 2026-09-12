@@ -16,9 +16,23 @@ async function post(action, body={}){
 }
 const mem = new Map()
 function cachedGet(key, fetcher, ttl=20000){
+  const now = Date.now()
   const hit = mem.get(key)
-  if(hit && Date.now()-hit.t < ttl) return Promise.resolve(hit.v)
-  return fetcher().then(v=>{ mem.set(key,{v,t:Date.now()}); try{localStorage.setItem('cache_'+key, JSON.stringify({v,t:Date.now()}))}catch(_){}; return v })
+  if(hit && now-hit.t < ttl) return Promise.resolve(hit.v)
+  try {
+    const stored = JSON.parse(localStorage.getItem('cache_'+key) || 'null')
+    if(stored?.v !== undefined && now-stored.t < ttl){
+      mem.set(key, stored)
+      return Promise.resolve(stored.v)
+    }
+    if(stored) localStorage.removeItem('cache_'+key)
+  } catch(_) {
+    try{ localStorage.removeItem('cache_'+key) }catch(__){}
+  }
+  return fetcher().then(v=>{ const entry={v,t:Date.now()}; mem.set(key,entry); try{localStorage.setItem('cache_'+key, JSON.stringify(entry))}catch(_){}; return v })
+}
+function invalidateCache(...keys){
+  keys.forEach(key=>{ mem.delete(key); try{localStorage.removeItem('cache_'+key)}catch(_){} })
 }
 export const api = {
   getInit: ()=> cachedGet('init', ()=> get('getInit'), 30000),
@@ -32,14 +46,17 @@ export const api = {
   getConfig: ()=> cachedGet('cfg', ()=> get('getConfig'), 30000),
   clearCache: ()=> { mem.clear(); try{Object.keys(localStorage).forEach(k=>k.startsWith('cache_')&&localStorage.removeItem(k))}catch(_){} },
   login: (email,password)=> post('login',{email,password}),
-  createCategory: (data,token)=> post('createCategory',{...data, token}).then(r=>{ mem.delete('cats'); mem.delete('init'); return r}),
-  updateCategory: (data,token)=> post('updateCategory',{...data, token}).then(r=>{ mem.delete('cats'); mem.delete('init'); return r}),
-  deleteCategory: (id,token)=> post('deleteCategory',{id,token}).then(r=>{ mem.delete('cats'); mem.delete('init'); return r}),
-  createProduct: (data,token)=> post('createProduct',{...data, token}).then(r=>{ mem.delete('prods'); mem.delete('init'); return r}),
-  updateProduct: (data,token)=> post('updateProduct',{...data, token}).then(r=>{ mem.delete('prods'); mem.delete('init'); return r}),
-  deleteProduct: (id,token)=> post('deleteProduct',{id,token}).then(r=>{ mem.delete('prods'); mem.delete('init'); return r}),
+  createPromotionRequest: (data)=> post('createPromotionRequest', data),
+  getPromotionRequests: (token)=> get('getPromotionRequests', {token}),
+  updatePromotionRequestStatus: (id,status,token)=> post('updatePromotionRequestStatus',{id,status,token}),
+  createCategory: (data,token)=> post('createCategory',{...data, token}).then(r=>{ invalidateCache('cats','init'); return r}),
+  updateCategory: (data,token)=> post('updateCategory',{...data, token}).then(r=>{ invalidateCache('cats','init'); return r}),
+  deleteCategory: (id,token)=> post('deleteCategory',{id,token}).then(r=>{ invalidateCache('cats','init'); return r}),
+  createProduct: (data,token)=> post('createProduct',{...data, token}).then(r=>{ invalidateCache('prods','init'); return r}),
+  updateProduct: (data,token)=> post('updateProduct',{id:data.id,...data, token}).then(r=>{ invalidateCache('prods','init'); return r}),
+  deleteProduct: (id,token)=> post('deleteProduct',{id,token}).then(r=>{ invalidateCache('prods','init'); return r}),
   upsertPlatform: (data,token)=> post('upsertPlatform',{...data,token}),
-  updateConfig: (key,value,token)=> post('updateConfig',{key,value,token}),
+  updateConfig: (key,value,token)=> post('updateConfig',{key,value,token}).then(r=>{ invalidateCache('cfg','init'); return r }),
 };
 export async function cloudinaryUpload(file, cloud, preset){
   const fd=new FormData(); fd.append('file',file); fd.append('upload_preset', preset);
